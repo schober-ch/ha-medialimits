@@ -12,9 +12,14 @@ import logging
 
 import homeassistant.components.mqtt as mqtt
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import async_track_time_change
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    DOMAIN,
     CONF_NODE_ID,
     CONF_WEEKDAY_CAP,
     CONF_WEEKEND_CAP,
@@ -76,6 +81,8 @@ class TimekprSyncCoordinator:
             TOPIC_SUFFIX_CAPS: self._full(TOPIC_SUFFIX_CAPS),
         }
         self._unsubs = []
+        self._startup_reset = False
+        self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}")
 
     def _full(self, suffix: str) -> str:
         return f"{_TOPIC_ROOT}/{self.node_id}/{suffix}"
@@ -119,7 +126,10 @@ class TimekprSyncCoordinator:
 
     async def async_init(self) -> None:
         """Subscribe to MQTT and schedule the Monday reset."""
-        await mqtt.async_wait_for_mqtt_client(self.hass)
+        if not await mqtt.async_wait_for_mqtt_client(self.hass):
+            raise ConfigEntryNotReady("MQTT is not available")
+
+        await self._async_check_missed_reset()
 
         self._unsubs.append(
             await mqtt.async_subscribe(
@@ -151,9 +161,42 @@ class TimekprSyncCoordinator:
                     "Weekly screen-time budget reset to %s mins", self.weekly_budget
                 )
                 await self.async_set_balance(self.weekly_budget)
+                await self._async_save_reset_week()
 
         self._unsubs.append(
             async_track_time_change(self.hass, _monday_reset, hour=0, minute=0, second=0)
+        )
+
+    @staticmethod
+    def _current_week_key() -> str:
+        year, week, _ = dt_util.now().isocalendar()
+        return f"{year}-W{week:02d}"
+
+    async def _async_save_reset_week(self) -> None:
+        await self._store.async_save({"reset_week": self._current_week_key()})
+
+    async def _async_check_missed_reset(self) -> None:
+        """Flag a reset if the stored week is older than this week (HA was down on Monday)."""
+        stored = await self._store.async_load()
+        week = self._current_week_key()
+        if stored is None:
+            await self._async_save_reset_week()
+        elif stored.get("reset_week") != week:
+            _LOGGER.info("Missed weekly reset detected; resetting budget to %s", self.weekly_budget)
+            self._startup_reset = True
+            await self._async_save_reset_week()
+
+    def consume_startup_reset(self) -> bool:
+        """Return True once if the budget must be reset instead of restored."""
+        pending, self._startup_reset = self._startup_reset, False
+        return pending
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.node_id)},
+            name=f"Timekpr {self.node_id}",
+            manufacturer="Timekpr-nExT",
         )
 
     async def async_shutdown(self) -> None:

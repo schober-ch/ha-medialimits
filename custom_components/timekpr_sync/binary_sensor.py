@@ -37,6 +37,7 @@ class PcOnlineBinarySensor(BinarySensorEntity):
         node = coordinator.node_id
         self._attr_name = f"{BINARY_SENSOR_NAME} ({node})"
         self._attr_unique_id = f"{BINARY_SENSOR_UNIQUE_ID}_{node}"
+        self._attr_device_info = coordinator.device_info
 
     @property
     def is_on(self) -> bool:

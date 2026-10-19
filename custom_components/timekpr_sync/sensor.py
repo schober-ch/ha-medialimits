@@ -42,6 +42,7 @@ class PcTimeLeftSensor(SensorEntity):
         node = coordinator.node_id
         self._attr_name = f"{SENSOR_NAME} ({node})"
         self._attr_unique_id = f"{SENSOR_UNIQUE_ID}_{node}"
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> int | None:

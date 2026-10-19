@@ -293,9 +293,7 @@ def main() -> int:
             else:
                 current = get_timekpr_time_left()
                 if current is not None:
-                    publish_pc_time_left(client)
-                if current is not None:
-                    publish_pc_time_left(client)
+                    client.publish(TOPIC_PC_TIME_LEFT, str(current), qos=0, retain=True)
                     if _last_pc_seconds is not None and current < _last_pc_seconds:
                         # Usage since last poll; carry partial minutes to the next report.
                         _pending_seconds += _last_pc_seconds - current

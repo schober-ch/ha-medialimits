@@ -8,7 +8,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AGENT_SRC="$SCRIPT_DIR/timepkr_agent.py"
+AGENT_SRC="$SCRIPT_DIR/timekpr_agent.py"
 AGENT_DEST="/usr/local/bin/timekpr_agent.py"
 CONF_FILE="/etc/timekpr-agent.conf"
 STATE_FILE="/etc/timekpr-agent.state"
@@ -43,19 +43,13 @@ if [[ -z "$TIMEKPRA_BIN" ]]; then
   exit 1
 fi
 
-# 3. Install dependencies: the agent requires paho-mqtt >= 2.0
+# 3. Check dependencies: the agent requires paho-mqtt >= 2.0 (not installed automatically)
 if ! python3 -c 'import sys, paho.mqtt as m; sys.exit(0 if int(m.__version__.split(".")[0]) >= 2 else 1)' 2>/dev/null; then
-  echo "Installing paho-mqtt (>= 2.0)..."
-  apt-get update -qq
-  apt-get install -y -qq python3-paho-mqtt
-  if ! python3 -c 'import sys, paho.mqtt as m; sys.exit(0 if int(m.__version__.split(".")[0]) >= 2 else 1)' 2>/dev/null; then
-    echo "ERROR: the distro's python3-paho-mqtt is older than 2.0, which this agent requires." 1>&2
-    echo "Install paho-mqtt>=2.0 into python3 (e.g. pip3 install 'paho-mqtt>=2.0') and re-run." 1>&2
-    exit 1
-  fi
-else
-  echo "paho-mqtt >= 2.0 already available."
+  echo "ERROR: python3 module 'paho-mqtt' >= 2.0 is required but was not found." 1>&2
+  echo "Install it with your distro's package manager or pip, then re-run this installer." 1>&2
+  exit 1
 fi
+echo "paho-mqtt >= 2.0 available."
 
 # 4. Deploy Python agent
 echo "Copying agent to $AGENT_DEST..."

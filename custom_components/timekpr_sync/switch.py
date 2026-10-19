@@ -44,6 +44,7 @@ class BlockPcSwitch(SwitchEntity):
         self._attr_name = f"{SWITCH_NAME} ({node})"
         self._attr_unique_id = f"{SWITCH_UNIQUE_ID}_{node}"
         self._attr_icon = SWITCH_ICON
+        self._attr_device_info = coordinator.device_info
 
     @property
     def is_on(self) -> bool:

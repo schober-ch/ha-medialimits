@@ -11,9 +11,9 @@ from unittest import mock
 import pytest
 
 # Load the agent module (it guards main() under `__main__`, so importing is safe).
-_AGENT_PATH = Path(__file__).resolve().parent.parent / "client" / "timepkr_agent.py"
+_AGENT_PATH = Path(__file__).resolve().parent.parent / "client" / "timekpr_agent.py"
 
-_spec = importlib.util.spec_from_file_location("timepkr_agent_test_mod", _AGENT_PATH)
+_spec = importlib.util.spec_from_file_location("timekpr_agent_test_mod", _AGENT_PATH)
 agent = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(agent)
 

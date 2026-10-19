@@ -51,6 +51,7 @@ class WeeklyScreenTimeNumber(RestoreNumber):
         self._attr_native_unit_of_measurement = NUMBER_UNIT
         self._attr_icon = NUMBER_ICON
         self._attr_should_poll = False
+        self._attr_device_info = coordinator.device_info
 
     @property
     def native_value(self) -> float:
@@ -64,6 +65,9 @@ class WeeklyScreenTimeNumber(RestoreNumber):
     async def async_added_to_hass(self) -> None:
         """Restore the last value after a restart, then broadcast to the PC."""
         await super().async_added_to_hass()
+        if self._coordinator.consume_startup_reset():
+            await self._coordinator.async_set_balance(self._coordinator.weekly_budget)
+            return
         last = await self.async_get_last_number_data()
         restored = None
         if last is not None and last.native_value is not None:

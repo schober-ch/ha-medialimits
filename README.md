@@ -15,7 +15,7 @@
 > - Use it at your own risk. No warranty is given. The authors accept no responsibility for lockouts,
 >   data loss, or any other effect of running this software.
 
-A Home Assistant integration plus a small Linux client (`timepkr_agent.py`) that together enforce a
+A Home Assistant integration plus a small Linux client (`timekpr_agent.py`) that together enforce a
 **shared 300-minute-per-week screen-time budget** between a child's Linux PC (enforced locally by
 [Timekpr-nExT](https://github.com/polesapart/timekpr-next)) and a TV (tracked manually in Home
 Assistant). Home Assistant is the **single source of truth** for the weekly balance; the PC client is
@@ -39,7 +39,7 @@ a pure **actuator + reporter** over MQTT.
   - `switch.block_pc_access_<node>` — emergency lockout (sets the PC's time left to 0 immediately).
   - `binary_sensor.pc_agent_online_<node>` — whether the PC agent is connected.
   - `sensor.pc_time_left_<node>` — live PC time remaining in minutes.
-- **PC client** (`client/timepkr_agent.py`, a systemd service) enforces caps locally via `timekpra`:
+- **PC client** (`client/timekpr_agent.py`, a systemd service) enforces caps locally via `timekpra`:
   - Reports spent minutes to HA so the weekly balance is decremented.
   - Clamps today's remaining time to `min(daily_cap, weekly_budget)` whenever the budget or caps change.
   - Locks and unlocks the desktop when the HA block switch changes.
@@ -111,8 +111,9 @@ The installer asks for the child's username, MQTT broker host, port, credentials
 caps. It then:
 
 - checks that `timekpra` is installed,
-- requires `paho-mqtt` 2.0 or newer (the installer prints guidance if the distro package is older),
-- installs `timepkr_agent.py` to `/usr/local/bin/timekpr_agent.py`,
+- requires `paho-mqtt` 2.0 or newer for python3 and exits with an error if it is missing (it does not
+  install packages itself, so it works on any distro),
+- installs `timekpr_agent.py` to `/usr/local/bin/timekpr_agent.py`,
 - writes `/etc/timekpr-agent.conf` (mode 600),
 - enables and starts the `timekpr-agent` systemd service.
 
@@ -152,7 +153,7 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements_test.txt
 python3 -m pytest client/test_timekpr_agent.py -v     # client unit tests (no HA needed)
 python3 -m pytest tests/ -v                           # HA integration tests
-python3 -m py_compile client/timepkr_agent.py custom_components/timekpr_sync/*.py
+python3 -m py_compile client/timekpr_agent.py custom_components/timekpr_sync/*.py
 bash -n client/install.sh
 ```
 
