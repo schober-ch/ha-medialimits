@@ -111,8 +111,8 @@ The installer asks for the child's username, MQTT broker host, port, credentials
 caps. It then:
 
 - checks that `timekpra` is installed,
-- requires `paho-mqtt` 2.0 or newer for python3 and exits with an error if it is missing (it does not
-  install packages itself, so it works on any distro),
+- requires `paho-mqtt` 1.6 or newer (1.x and 2.x both work) for python3 and exits with an error if it is
+  missing (it does not install packages itself, so it works on any distro),
 - installs `timekpr_agent.py` to `/usr/local/bin/timekpr_agent.py`,
 - writes `/etc/timekpr-agent.conf` (mode 600),
 - enables and starts the `timekpr-agent` systemd service.

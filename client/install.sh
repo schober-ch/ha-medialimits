@@ -43,13 +43,13 @@ if [[ -z "$TIMEKPRA_BIN" ]]; then
   exit 1
 fi
 
-# 3. Check dependencies: the agent requires paho-mqtt >= 2.0 (not installed automatically)
-if ! python3 -c 'import sys, paho.mqtt as m; sys.exit(0 if int(m.__version__.split(".")[0]) >= 2 else 1)' 2>/dev/null; then
-  echo "ERROR: python3 module 'paho-mqtt' >= 2.0 is required but was not found." 1>&2
+# 3. Check dependencies: the agent supports paho-mqtt 1.6+ and 2.x (not installed automatically)
+if ! python3 -c 'import sys, paho.mqtt as m; v = tuple(int(x) for x in m.__version__.split(".")[:2]); sys.exit(0 if v >= (1, 6) else 1)' 2>/dev/null; then
+  echo "ERROR: python3 module 'paho-mqtt' >= 1.6 is required but was not found." 1>&2
   echo "Install it with your distro's package manager or pip, then re-run this installer." 1>&2
   exit 1
 fi
-echo "paho-mqtt >= 2.0 available."
+echo "paho-mqtt available."
 
 # 4. Deploy Python agent
 echo "Copying agent to $AGENT_DEST..."
@@ -96,7 +96,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable --now timekpr-agent.service
+systemctl enable timekpr-agent.service
+systemctl restart timekpr-agent.service
 
 echo ""
 echo "=== Installation Complete! ==="

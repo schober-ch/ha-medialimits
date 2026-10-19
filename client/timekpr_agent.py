@@ -187,7 +187,8 @@ def _persist_blocked(blocked: bool) -> None:
 # ---------------------------------------------------------------------------
 # MQTT callbacks
 # ---------------------------------------------------------------------------
-def _on_connect(client, userdata, flags, reason_code, properties):
+def _on_connect(client, userdata, flags, reason_code, *_extra):
+    # paho 1.x passes (flags, rc); paho 2.x passes (flags, reason_code, properties).
     if reason_code != 0:
         _LOG.error("MQTT connection failed: %s", reason_code)
         return
@@ -200,7 +201,9 @@ def _on_connect(client, userdata, flags, reason_code, properties):
         client.publish(TOPIC_BLOCK_STATE, "ON", qos=0, retain=True)
 
 
-def _on_disconnect(client, userdata, flags, reason_code, properties):
+def _on_disconnect(client, userdata, *args):
+    # paho 1.x passes (rc); paho 2.x passes (flags, reason_code, properties).
+    reason_code = args[1] if len(args) >= 3 else (args[0] if args else None)
     _LOG.warning("Disconnected from MQTT broker (reason_code=%s)", reason_code)
 
 
@@ -264,10 +267,11 @@ def main() -> int:
         _is_blocked,
     )
 
-    client = mqtt.Client(
-        mqtt.CallbackAPIVersion.VERSION2,
-        client_id=f"timekpr-agent-{_NODE_ID}",
-    )
+    client_id = f"timekpr-agent-{_NODE_ID}"
+    if hasattr(mqtt, "CallbackAPIVersion"):  # paho-mqtt >= 2.0
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
+    else:  # paho-mqtt 1.x
+        client = mqtt.Client(client_id=client_id)
     if _MQTT_USER:
         client.username_pw_set(_MQTT_USER, _MQTT_PASS)
 

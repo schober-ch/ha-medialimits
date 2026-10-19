@@ -12,6 +12,12 @@ from custom_components.timekpr_sync import DOMAIN
 
 
 @pytest.fixture(autouse=True)
+def expected_lingering_timers() -> bool:
+    """HA's MQTT subscription debouncer leaves a timer behind; it is not ours."""
+    return True
+
+
+@pytest.fixture(autouse=True)
 def _auto_enable_custom_integrations(enable_custom_integrations):
     """Make the custom_components/timekpr_sync package importable in every test."""
     yield
