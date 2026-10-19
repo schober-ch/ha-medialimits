@@ -1,0 +1,6 @@
+{
+  "name": "Timekpr Screen Time Sync",
+  "content_in_root": false,
+  "domains": ["timekpr_sync"],
+  "homeassistant": "2024.1.0"
+}

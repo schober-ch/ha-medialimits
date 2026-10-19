@@ -1,0 +1,39 @@
+deduct_tv_minutes:
+  name: Deduct TV minutes
+  description: Deduct TV minutes from the weekly screen-time budget.
+  fields:
+    minutes:
+      name: Minutes
+      description: Minutes to deduct.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 300
+          unit_of_measurement: "min"
+    node_id:
+      name: Node ID
+      description: PC to apply this to. Optional when only one PC is configured.
+      required: false
+      selector:
+        text:
+
+add_tv_minutes:
+  name: Add TV minutes
+  description: Add minutes back to the weekly screen-time budget.
+  fields:
+    minutes:
+      name: Minutes
+      description: Minutes to add back.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 300
+          unit_of_measurement: "min"
+    node_id:
+      name: Node ID
+      description: PC to apply this to. Optional when only one PC is configured.
+      required: false
+      selector:
+        text:

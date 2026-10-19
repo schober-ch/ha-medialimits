@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Timekpr Screen Time Sync",
+        "description": "Choose the PC node ID and the screen-time budget. Credentials come from the MQTT integration.",
+        "data": {
+          "node_id": "PC node ID",
+          "weekly_budget": "Weekly budget (minutes)",
+          "weekday_cap_minutes": "Weekday cap (minutes, Mon-Fri)",
+          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Timekpr Screen Time Sync options",
+        "data": {
+          "weekly_budget": "Weekly budget (minutes)",
+          "weekday_cap_minutes": "Weekday cap (minutes, Mon-Fri)",
+          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)"
+        }
+      }
+    },
+    "error": {
+      "invalid_budget": "Weekly budget must be at least 1 minute."
+    }
+  }
+}

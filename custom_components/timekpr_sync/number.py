@@ -1,85 +1,74 @@
-"""Weekly screen time number slider with automatic MQTT sync and weekly reset."""
+"""Weekly screen-time balance number entity (master of the budget).
+
+The native value lives in the coordinator (single source of truth). This entity simply mirrors it
+and is restored from HA state on startup.
+"""
+
+from __future__ import annotations
 
 import logging
+
 from homeassistant.components.number import RestoreNumber
-from homeassistant.components import mqtt
-from homeassistant.helpers.event import async_track_time_change
-import homeassistant.util.dt as dt_util
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+
+from .const import (
+    DOMAIN,
+    NUMBER_ICON,
+    NUMBER_NAME,
+    NUMBER_UNIQUE_ID,
+    NUMBER_UNIT,
+)
+from .coordinator import TimekprSyncCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_WEEKLY_MINUTES = 300
-TOPIC_DEDUCT = "kids_pc/deduct_pc_minutes"
-TOPIC_SET_BUDGET = "kids_pc/weekly_budget/set"
 
-
-async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Add the Weekly Screen Time number entity."""
-    entity = WeeklyScreenTimeNumber(hass)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities,
+) -> None:
+    """Add the weekly screen-time number entity."""
+    coordinator: TimekprSyncCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entity = WeeklyScreenTimeNumber(coordinator)
+    coordinator.number_entity = entity
     async_add_entities([entity])
 
 
 class WeeklyScreenTimeNumber(RestoreNumber):
     """Represents the master weekly balance slider."""
 
-    def __init__(self, hass):
-        self.hass = hass
-        self._attr_name = "Weekly Screen Time Left"
-        self._attr_unique_id = "timekpr_weekly_screen_time_left"
+    def __init__(self, coordinator: TimekprSyncCoordinator) -> None:
+        """Initialize the number with values from the coordinator."""
+        self._coordinator = coordinator
+        node = coordinator.node_id
+        self._attr_name = f"{NUMBER_NAME} ({node})"
+        self._attr_unique_id = f"{NUMBER_UNIQUE_ID}_{node}"
         self._attr_native_min_value = 0
-        self._attr_native_max_value = 300
+        self._attr_native_max_value = coordinator.weekly_budget
         self._attr_native_step = 1
-        self._attr_native_unit_of_measurement = "min"
-        self._attr_icon = "mdi:timer-sand"
-        self._attr_native_value = DEFAULT_WEEKLY_MINUTES
+        self._attr_native_unit_of_measurement = NUMBER_UNIT
+        self._attr_icon = NUMBER_ICON
+        self._attr_should_poll = False
 
-    async def async_added_to_hass(self):
-        """Restore state on startup, register MQTT listeners, and set reset timer."""
-        await super().async_added_to_hass()
-
-        # 1. Restore previous value after Home Assistant restart
-        last_state = await self.async_get_last_number_data()
-        if last_state and last_state.native_value is not None:
-            self._attr_native_value = int(last_state.native_value)
-        else:
-            self._attr_native_value = DEFAULT_WEEKLY_MINUTES
-
-        # Broadcast current budget to the PC immediately
-        await self._publish_to_pc(self._attr_native_value)
-
-        # 2. MQTT Listener (Replaces Automation A: Deduct PC Time)
-        async def handle_deduct_message(msg):
-            try:
-                spent = int(msg.payload)
-                new_val = max(0, int(self._attr_native_value) - spent)
-                await self.async_set_native_value(new_val)
-            except ValueError:
-                pass
-
-        await mqtt.async_subscribe(self.hass, TOPIC_DEDUCT, handle_deduct_message)
-
-        # 3. Monday Midnight Timer (Replaces Automation C: Weekly Reset)
-        async def handle_monday_reset(now):
-            # 0 = Monday in Python's weekday()
-            if now.weekday() == 0:
-                _LOGGER.info(
-                    "Resetting weekly screen time allowance to %s mins",
-                    DEFAULT_WEEKLY_MINUTES,
-                )
-                await self.async_set_native_value(DEFAULT_WEEKLY_MINUTES)
-
-        async_track_time_change(
-            self.hass, handle_monday_reset, hour=0, minute=0, second=0
-        )
+    @property
+    def native_value(self) -> float:
+        """Return the current balance."""
+        return float(self._coordinator.balance)
 
     async def async_set_native_value(self, value: float) -> None:
-        """Update slider value and notify PC (Replaces Automation B)."""
-        self._attr_native_value = int(value)
-        self.async_write_ha_state()
+        """Adjust the weekly balance and push it to the PC."""
+        await self._coordinator.async_set_balance(int(value))
 
-        # Push updated budget to PC so it can clamp playtime if needed
-        await self._publish_to_pc(int(value))
-
-    async def _publish_to_pc(self, minutes: int):
-        """Send budget to MQTT."""
-        await mqtt.async_publish(self.hass, TOPIC_SET_BUDGET, str(minutes), retain=True)
+    async def async_added_to_hass(self) -> None:
+        """Restore the last value after a restart, then broadcast to the PC."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_number_data()
+        restored = None
+        if last is not None and last.native_value is not None:
+            restored = int(last.native_value)
+            _LOGGER.debug("Restored weekly balance to %s mins", restored)
+        await self._coordinator.async_set_balance(
+            restored if restored is not None else self._coordinator.balance
+        )
