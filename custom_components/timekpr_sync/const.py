@@ -67,6 +67,8 @@ TOPIC_SUFFIX_BLOCK_STATE = "blocked/state"
 TOPIC_SUFFIX_AVAILABLE = "available"
 TOPIC_SUFFIX_PC_TIME_LEFT = "pc_time_left"
 TOPIC_SUFFIX_CAPS = "caps"
+TOPIC_SUFFIX_DAILY_BONUS = "daily_bonus"
+MAX_DAILY_BONUS = 24 * 60
 
 # MQTT payload values
 PAYLOAD_ON = "ON"

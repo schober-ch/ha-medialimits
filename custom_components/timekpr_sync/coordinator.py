@@ -39,6 +39,8 @@ from .const import (
     TOPIC_SUFFIX_BLOCK_SET,
     TOPIC_SUFFIX_BLOCK_STATE,
     TOPIC_SUFFIX_CAPS,
+    TOPIC_SUFFIX_DAILY_BONUS,
+    MAX_DAILY_BONUS,
     TOPIC_SUFFIX_DEDUCT,
     TOPIC_SUFFIX_PC_TIME_LEFT,
     TOPIC_SUFFIX_WEEKLY_BUDGET,
@@ -71,8 +73,10 @@ class TimekprSyncCoordinator:
         self.blocked: bool = False
         self.available: bool = False
         self.pc_time_left_seconds: int | None = None
+        self.daily_bonus: int = 0
 
         # Entities to notify when state changes
+        self.daily_bonus_entity = None
         self.number_entity = None
         self.switch_entity = None
         self.binary_sensor_entity = None
@@ -86,9 +90,11 @@ class TimekprSyncCoordinator:
             TOPIC_SUFFIX_AVAILABLE: self._full(TOPIC_SUFFIX_AVAILABLE),
             TOPIC_SUFFIX_PC_TIME_LEFT: self._full(TOPIC_SUFFIX_PC_TIME_LEFT),
             TOPIC_SUFFIX_CAPS: self._full(TOPIC_SUFFIX_CAPS),
+            TOPIC_SUFFIX_DAILY_BONUS: self._full(TOPIC_SUFFIX_DAILY_BONUS),
         }
         self._unsubs = []
         self._startup_reset = False
+        self._stored: dict = {}
         self._store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}")
 
     def _full(self, suffix: str) -> str:
@@ -121,6 +127,10 @@ class TimekprSyncCoordinator:
     @property
     def caps_topic(self) -> str:
         return self._topic[TOPIC_SUFFIX_CAPS]
+
+    @property
+    def daily_bonus_topic(self) -> str:
+        return self._topic[TOPIC_SUFFIX_DAILY_BONUS]
 
     async def _async_publish_caps(self) -> None:
         payload = json.dumps(
@@ -160,8 +170,10 @@ class TimekprSyncCoordinator:
         )
 
         await self._async_publish_caps()
+        await self._async_publish_daily_bonus()
 
-        async def _monday_reset(now):
+        async def _midnight(now):
+            await self._async_reset_daily_bonus()
             # weekday() == 0 means Monday
             if now.weekday() == 0:
                 _LOGGER.info(
@@ -171,7 +183,7 @@ class TimekprSyncCoordinator:
                 await self._async_save_reset_week()
 
         self._unsubs.append(
-            async_track_time_change(self.hass, _monday_reset, hour=0, minute=0, second=0)
+            async_track_time_change(self.hass, _midnight, hour=0, minute=0, second=0)
         )
 
     @staticmethod
@@ -179,20 +191,58 @@ class TimekprSyncCoordinator:
         year, week, _ = dt_util.now().isocalendar()
         return f"{year}-W{week:02d}"
 
+    @staticmethod
+    def _today() -> str:
+        return dt_util.now().date().isoformat()
+
+    async def _async_save_store(self) -> None:
+        await self._store.async_save(self._stored)
+
     async def _async_save_reset_week(self) -> None:
-        await self._store.async_save({"reset_week": self._current_week_key()})
+        self._stored["reset_week"] = self._current_week_key()
+        await self._async_save_store()
 
     async def _async_check_missed_reset(self) -> None:
         """Flag a reset if the stored week is older than this week (HA was down on Monday)."""
-        stored = await self._store.async_load()
+        self._stored = await self._store.async_load() or {}
         week = self._current_week_key()
-        if stored is None:
+        if "reset_week" not in self._stored:
             await self._async_save_reset_week()
-        elif stored.get("reset_week") != week:
+        elif self._stored["reset_week"] != week:
             _LOGGER.info("Missed weekly reset detected; resetting budget to %s", self.weekly_budget)
             self._startup_reset = True
             await self._async_save_reset_week()
 
+        if self._stored.get("daily_bonus_date") == self._today():
+            self.daily_bonus = int(self._stored.get("daily_bonus", 0))
+
+    def _today_cap(self) -> int:
+        return self.weekday_cap if dt_util.now().weekday() < 5 else self.weekend_cap
+
+    async def _async_publish_daily_bonus(self) -> None:
+        payload = json.dumps({"minutes": self.daily_bonus, "date": self._today()})
+        await mqtt.async_publish(
+            self.hass, self.daily_bonus_topic, payload, qos=0, retain=True
+        )
+
+    async def async_adjust_daily(self, minutes: int) -> None:
+        """Add (or remove) minutes for today only; the PC applies it on top of today's cap."""
+        self.daily_bonus = max(
+            -self._today_cap(), min(self.daily_bonus + int(minutes), MAX_DAILY_BONUS)
+        )
+        self._stored["daily_bonus"] = self.daily_bonus
+        self._stored["daily_bonus_date"] = self._today()
+        await self._async_save_store()
+        await self._async_publish_daily_bonus()
+        self._notify_daily_bonus()
+
+    async def _async_reset_daily_bonus(self) -> None:
+        self.daily_bonus = 0
+        self._stored["daily_bonus"] = 0
+        self._stored["daily_bonus_date"] = self._today()
+        await self._async_save_store()
+        await self._async_publish_daily_bonus()
+        self._notify_daily_bonus()
     def consume_startup_reset(self) -> bool:
         """Return True once if the budget must be reset instead of restored."""
         pending, self._startup_reset = self._startup_reset, False
@@ -292,3 +342,7 @@ class TimekprSyncCoordinator:
     def _notify_sensor(self) -> None:
         if self.sensor_entity is not None:
             self.sensor_entity.async_write_ha_state()
+
+    def _notify_daily_bonus(self) -> None:
+        if self.daily_bonus_entity is not None:
+            self.daily_bonus_entity.async_write_ha_state()

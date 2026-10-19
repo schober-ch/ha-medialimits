@@ -47,12 +47,16 @@ TOPIC_BLOCK_STATE = f"timekpr/{_NODE_ID}/blocked/state"  # PC -> HA (retained)
 TOPIC_AVAILABLE = f"timekpr/{_NODE_ID}/available"  # PC -> HA (retained/LWT)
 TOPIC_PC_TIME_LEFT = f"timekpr/{_NODE_ID}/pc_time_left"  # PC -> HA (retained)
 TOPIC_CAPS = f"timekpr/{_NODE_ID}/caps"  # HA -> PC (retained)
+TOPIC_DAILY_BONUS = f"timekpr/{_NODE_ID}/daily_bonus"  # HA -> PC (retained, JSON)
 
 # Runtime state
 _weekly_budget_remaining = 300
 _last_pc_seconds = None
 _pending_seconds = 0
 _is_blocked = False
+_daily_bonus = 0  # signed minutes added to today's cap (valid only for _daily_bonus_date)
+_daily_bonus_date = None
+_BONUS_STATE_FILE = _STATE_FILE + ".bonus"
 
 
 # ---------------------------------------------------------------------------
@@ -62,15 +66,24 @@ def _timekpr_bin() -> str:
     return os.environ.get("TIMEKPR_BIN", "timekpra")
 
 
+def _today(now: datetime.datetime | None = None) -> str:
+    return (now or datetime.datetime.now()).date().isoformat()
+
+
+def get_daily_bonus_minutes(now: datetime.datetime | None = None) -> int:
+    """Today's HA-granted bonus (negative to reduce); 0 if it was set for another day."""
+    return _daily_bonus if _daily_bonus_date == _today(now) else 0
+
+
 def get_daily_cap_seconds(now: datetime.datetime | None = None) -> int:
-    """Mon-Fri (0-4) = WEEKDAY_CAP mins; Sat-Sun (5-6) = WEEKEND_CAP mins.
+    """Mon-Fri (0-4) = WEEKDAY_CAP mins; Sat-Sun (5-6) = WEEKEND_CAP mins, plus today's bonus.
 
     ``now`` is injectable for testing; defaults to the current time.
     """
     if now is None:
         now = datetime.datetime.now()
     minutes = _WEEKDAY_CAP if now.weekday() < 5 else _WEEKEND_CAP
-    return minutes * 60
+    return max(0, minutes + get_daily_bonus_minutes(now)) * 60
 
 
 def _parse_time_left_day(output: str):
@@ -156,6 +169,56 @@ def _apply_caps(payload: str) -> None:
     _LOG.info("Daily caps set to %s/%s mins (weekday/weekend)", weekday, weekend)
 
 
+def _load_applied_bonus(today: str) -> int:
+    """Bonus minutes already pushed into today's time left (survives agent restarts)."""
+    try:
+        with open(_BONUS_STATE_FILE, encoding="utf-8") as fh:
+            data = json.load(fh)
+        return int(data["minutes"]) if data.get("date") == today else 0
+    except (OSError, ValueError, KeyError, TypeError):
+        return 0
+
+
+def _persist_applied_bonus(today: str, minutes: int) -> None:
+    try:
+        with open(_BONUS_STATE_FILE, "w", encoding="utf-8") as fh:
+            json.dump({"date": today, "minutes": minutes}, fh)
+    except OSError:
+        _LOG.warning("Could not persist daily bonus to %s", _BONUS_STATE_FILE)
+
+
+def _handle_daily_bonus(payload: str) -> None:
+    """Apply the retained HA `daily_bonus` JSON ({"minutes": n, "date": "YYYY-MM-DD"}).
+
+    Only the change since the last applied bonus is added to today's time left, so a retained
+    replay after an agent restart does not grant the bonus twice.
+    """
+    global _daily_bonus, _daily_bonus_date
+    try:
+        data = json.loads(payload)
+        minutes = int(data["minutes"])
+        date = str(data["date"])
+    except (ValueError, KeyError, TypeError):
+        _LOG.warning("Invalid daily bonus payload ignored: %r", payload)
+        return
+    today = _today()
+    new = minutes if date == today else 0
+    applied = _load_applied_bonus(today)
+    _daily_bonus, _daily_bonus_date = new, today
+    _persist_applied_bonus(today, new)
+    _LOG.info("Daily bonus for %s is %+d mins", today, new)
+    if _is_blocked:
+        return
+    delta = new - applied
+    if delta > 0:
+        current = get_timekpr_time_left()
+        if current is not None:
+            allowance = min(get_daily_cap_seconds(), _weekly_budget_remaining * 60)
+            _agent_set(min(current + delta * 60, allowance))
+    else:
+        _clamp_to_allowance()
+
+
 def _agent_set(secs: int) -> None:
     """Set time left and mark it as agent-initiated so it is not reported as usage."""
     global _last_pc_seconds
@@ -193,7 +256,9 @@ def _on_connect(client, userdata, flags, reason_code, *_extra):
         _LOG.error("MQTT connection failed: %s", reason_code)
         return
     _LOG.info("Connected to MQTT broker at %s", _MQTT_BROKER)
-    client.subscribe([(TOPIC_WEEKLY_BUDGET, 0), (TOPIC_BLOCK_SET, 0), (TOPIC_CAPS, 0)])
+    client.subscribe(
+        [(TOPIC_WEEKLY_BUDGET, 0), (TOPIC_BLOCK_SET, 0), (TOPIC_CAPS, 0), (TOPIC_DAILY_BONUS, 0)]
+    )
     client.publish(TOPIC_AVAILABLE, "online", qos=0, retain=True)
     publish_pc_time_left(client)
     # Re-assert block state from persistence after a restart.
@@ -215,6 +280,9 @@ def _on_message(client, userdata, msg):
         _apply_caps(payload)
         if not _is_blocked:
             _clamp_to_allowance()
+
+    elif msg.topic == TOPIC_DAILY_BONUS:
+        _handle_daily_bonus(payload)
 
     elif msg.topic == TOPIC_WEEKLY_BUDGET:
         try:

@@ -21,11 +21,32 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities,
 ) -> None:
-    """Add the PC time-left sensor."""
+    """Add the PC time-left and today's-bonus sensors."""
     coordinator: TimekprSyncCoordinator = hass.data[DOMAIN][entry.entry_id]
     entity = PcTimeLeftSensor(coordinator)
     coordinator.sensor_entity = entity
-    async_add_entities([entity])
+    bonus = DailyBonusSensor(coordinator)
+    coordinator.daily_bonus_entity = bonus
+    async_add_entities([entity, bonus])
+
+
+class DailyBonusSensor(SensorEntity):
+    """Minutes added to (or removed from) today's allowance; resets at midnight."""
+
+    _attr_should_poll = False
+    _attr_icon = "mdi:clock-plus-outline"
+    _attr_native_unit_of_measurement = SENSOR_UNIT
+
+    def __init__(self, coordinator: TimekprSyncCoordinator) -> None:
+        self._coordinator = coordinator
+        node = coordinator.node_id
+        self._attr_name = f"Daily Bonus Today ({node})"
+        self._attr_unique_id = f"timekpr_daily_bonus_{node}"
+        self._attr_device_info = coordinator.device_info
+
+    @property
+    def native_value(self) -> int:
+        return self._coordinator.daily_bonus
 
 
 class PcTimeLeftSensor(SensorEntity):

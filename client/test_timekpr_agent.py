@@ -174,3 +174,69 @@ def test_clamp_applies_lower_cap_immediately(monkeypatch):
     agent._clamp_to_allowance()
     assert calls == [1200]
     assert agent._last_pc_seconds == 1200
+
+
+# ---- daily bonus ----------------------------------------------------------
+
+
+@pytest.fixture
+def bonus_env(monkeypatch, tmp_path, patch_caps):
+    monkeypatch.setattr(agent, "_BONUS_STATE_FILE", str(tmp_path / "bonus.json"))
+    monkeypatch.setattr(agent, "_daily_bonus", 0)
+    monkeypatch.setattr(agent, "_daily_bonus_date", None)
+    monkeypatch.setattr(agent, "_is_blocked", False)
+    monkeypatch.setattr(agent, "_weekly_budget_remaining", 300)
+    calls = []
+    monkeypatch.setattr(agent, "_agent_set", lambda secs: calls.append(secs))
+    return calls
+
+
+def _bonus_payload(minutes, date=None):
+    import json
+
+    return json.dumps({"minutes": minutes, "date": date or agent._today()})
+
+
+def test_bonus_raises_cap_and_adds_time(monkeypatch, bonus_env):
+    monkeypatch.setattr(agent, "get_timekpr_time_left", lambda: 600)
+    agent._handle_daily_bonus(_bonus_payload(15))
+    assert agent.get_daily_bonus_minutes() == 15
+    assert bonus_env == [600 + 15 * 60]
+
+
+def test_bonus_replay_after_restart_is_not_applied_twice(monkeypatch, bonus_env):
+    monkeypatch.setattr(agent, "get_timekpr_time_left", lambda: 600)
+    agent._handle_daily_bonus(_bonus_payload(15))
+    bonus_env.clear()
+    # Simulate an agent restart: in-memory state is lost, the persisted file stays.
+    monkeypatch.setattr(agent, "_daily_bonus", 0)
+    monkeypatch.setattr(agent, "_daily_bonus_date", None)
+    agent._handle_daily_bonus(_bonus_payload(15))
+    assert agent.get_daily_bonus_minutes() == 15
+    assert not any(c > 600 for c in bonus_env)
+
+
+def test_bonus_is_limited_by_weekly_budget(monkeypatch, bonus_env):
+    monkeypatch.setattr(agent, "_weekly_budget_remaining", 10)
+    monkeypatch.setattr(agent, "get_timekpr_time_left", lambda: 500)
+    agent._handle_daily_bonus(_bonus_payload(15))
+    assert bonus_env == [600]
+
+
+def test_stale_bonus_date_is_ignored(monkeypatch, bonus_env):
+    monkeypatch.setattr(agent, "get_timekpr_time_left", lambda: 600)
+    agent._handle_daily_bonus(_bonus_payload(15, date="2000-01-01"))
+    assert agent.get_daily_bonus_minutes() == 0
+
+
+def test_negative_bonus_lowers_cap(monkeypatch, bonus_env):
+    monkeypatch.setattr(agent, "get_timekpr_time_left", lambda: 1800)
+    agent._handle_daily_bonus(_bonus_payload(-10))
+    assert bonus_env == [min(agent.get_daily_cap_seconds(), 300 * 60)]
+    assert agent.get_daily_cap_seconds() == (agent._WEEKDAY_CAP if datetime.datetime.now().weekday() < 5 else agent._WEEKEND_CAP) * 60 - 600
+
+
+def test_invalid_bonus_payload_ignored(bonus_env):
+    agent._handle_daily_bonus("not json")
+    assert agent.get_daily_bonus_minutes() == 0
+    assert bonus_env == []

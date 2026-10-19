@@ -67,3 +67,40 @@ def test_parse_presets():
     for bad in ("", " , ", "0", "-5", "abc", "15,x"):
         with pytest.raises(ValueError):
             parse_presets(bad)
+
+
+async def test_daily_buttons_registered(hass, mqtt_mock_async):
+    await setup_integration(hass)
+    for entity_id in (
+        "button.today_add_15_min_child_pc",
+        "button.today_deduct_15_min_child_pc",
+        "button.today_add_30_min_child_pc",
+        "button.today_deduct_30_min_child_pc",
+        "sensor.daily_bonus_today_child_pc",
+    ):
+        assert hass.states.get(entity_id) is not None, entity_id
+
+
+async def test_daily_add_publishes_bonus_and_keeps_weekly(hass, mqtt_mock_async):
+    import json
+
+    from homeassistant.util import dt as dt_util
+
+    await setup_integration(hass)
+    await _press(hass, "button.today_add_15_min_child_pc")
+
+    assert hass.states.get("sensor.daily_bonus_today_child_pc").state == "15"
+    assert number_value(hass) == 300
+    payload = json.loads(dict(published_topics(mqtt_mock_async))["timekpr/child_pc/daily_bonus"])
+    assert payload == {"minutes": 15, "date": dt_util.now().date().isoformat()}
+
+
+async def test_daily_deduct_is_clamped_to_todays_cap(hass, mqtt_mock_async):
+    await setup_integration(hass)
+    for _ in range(5):  # 5 x 15 = 75 > weekday/weekend cap
+        await _press(hass, "button.today_deduct_15_min_child_pc")
+
+    from homeassistant.util import dt as dt_util
+
+    cap = 30 if dt_util.now().weekday() < 5 else 90
+    assert hass.states.get("sensor.daily_bonus_today_child_pc").state == str(-min(75, cap))

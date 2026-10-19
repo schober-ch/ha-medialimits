@@ -60,6 +60,7 @@ The node ID is set in the HA config flow and in the client's `/etc/timekpr-agent
 | `timekpr/<node>/blocked/state` | PC → HA | `ON` / `OFF` | yes | Confirmed block state. |
 | `timekpr/<node>/available` | PC → HA | `online` / `offline` | yes (also LWT) | PC agent connectivity. |
 | `timekpr/<node>/pc_time_left` | PC → HA | integer seconds | yes | Live PC time remaining. |
+| `timekpr/<node>/daily_bonus` | HA → PC | JSON `{"minutes": n, "date": "YYYY-MM-DD"}` | yes | Minutes added to (or removed from) today's cap. Ignored if the date is not today. |
 
 ## Data flow
 
@@ -134,6 +135,21 @@ example `button.tv_deduct_15_min_<node>` and `button.tv_add_15_min_<node>`. Pres
 or adds to the weekly budget. Change the presets (comma-separated minutes) in the integration's
 **Configure** menu; the entry reloads and the buttons are recreated. Buttons for presets you remove show
 up as unavailable and can be deleted under **Settings → Entities**.
+
+### Today's time (daily bonus)
+
+The same presets also create **Today** buttons, e.g. `button.today_add_15_min_<node>` and
+`button.today_deduct_15_min_<node>`. They change only *today's* allowance on the PC (the daily cap plus a
+bonus, which can be negative), not the weekly budget. `sensor.daily_bonus_today_<node>` shows the current
+bonus. The bonus resets at midnight, and the PC ignores a bonus dated for another day.
+
+- Time actually used on the PC is still deducted from the weekly budget, and today's allowance can
+  never exceed what is left of the weekly budget.
+- The PC agent adds only the *change* in bonus to today's time left, and remembers what it applied in
+  `/etc/timekpr-agent.state.bonus`, so a restart or a retained replay does not grant it twice. If the agent
+  was offline when a button was pressed, the bonus is applied once it reconnects.
+- The bonus is limited to the day's cap when reducing and to 24 h when adding.
+- This needs the updated agent: re-run `sudo ./client/install.sh` on the PC.
 
 For amounts that are not a preset, or for scripts and automations, call the services directly:
 
