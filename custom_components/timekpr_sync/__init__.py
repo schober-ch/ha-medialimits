@@ -2,7 +2,7 @@
 
 Modern config-entry integration:
 - async_setup_entry / async_unload_entry lifecycle
-- Forwards the entry to the number, switch, binary_sensor and sensor platforms
+- Forwards the entry to the number, switch, binary_sensor, sensor and button platforms
 - Registers the deduct_tv_minutes / add_tv_minutes services once per domain
 """
 
@@ -27,6 +27,7 @@ PLATFORMS = [
     Platform.SWITCH,
     Platform.BINARY_SENSOR,
     Platform.SENSOR,
+    Platform.BUTTON,
 ]
 
 _SCHEMA_MINUTES = vol.Schema(

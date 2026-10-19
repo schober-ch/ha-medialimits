@@ -8,9 +8,13 @@
           "node_id": "PC node ID",
           "weekly_budget": "Weekly budget (minutes)",
           "weekday_cap_minutes": "Weekday cap (minutes, Mon-Fri)",
-          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)"
+          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)",
+          "tv_presets": "TV preset minutes (comma-separated, e.g. 15,30)"
         }
       }
+    },
+    "error": {
+      "invalid_presets": "Enter positive whole minutes separated by commas, e.g. 15,30."
     }
   },
   "options": {
@@ -20,12 +24,14 @@
         "data": {
           "weekly_budget": "Weekly budget (minutes)",
           "weekday_cap_minutes": "Weekday cap (minutes, Mon-Fri)",
-          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)"
+          "weekend_cap_minutes": "Weekend cap (minutes, Sat-Sun)",
+          "tv_presets": "TV preset minutes (comma-separated, e.g. 15,30)"
         }
       }
     },
     "error": {
-      "invalid_budget": "Weekly budget must be at least 1 minute."
+      "invalid_budget": "Weekly budget must be at least 1 minute.",
+      "invalid_presets": "Enter positive whole minutes separated by commas, e.g. 15,30."
     }
   }
 }

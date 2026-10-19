@@ -20,6 +20,9 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
+    CONF_TV_PRESETS,
+    DEFAULT_TV_PRESETS,
+    parse_presets,
     CONF_NODE_ID,
     CONF_WEEKDAY_CAP,
     CONF_WEEKEND_CAP,
@@ -58,6 +61,10 @@ class TimekprSyncCoordinator:
         self.weekly_budget = int(data.get(CONF_WEEKLY_BUDGET, DEFAULT_WEEKLY_BUDGET))
         self.weekday_cap = int(data.get(CONF_WEEKDAY_CAP, DEFAULT_WEEKDAY_CAP))
         self.weekend_cap = int(data.get(CONF_WEEKEND_CAP, DEFAULT_WEEKEND_CAP))
+        try:
+            self.tv_presets = parse_presets(data.get(CONF_TV_PRESETS, DEFAULT_TV_PRESETS))
+        except ValueError:
+            self.tv_presets = parse_presets(DEFAULT_TV_PRESETS)
 
         # Runtime state
         self.balance: int = self.weekly_budget

@@ -8,14 +8,17 @@ from homeassistant import config_entries
 
 from .const import (
     CONF_NODE_ID,
+    CONF_TV_PRESETS,
     CONF_WEEKDAY_CAP,
     CONF_WEEKEND_CAP,
     CONF_WEEKLY_BUDGET,
     DEFAULT_NODE_ID,
+    DEFAULT_TV_PRESETS,
     DEFAULT_WEEKDAY_CAP,
     DEFAULT_WEEKEND_CAP,
     DEFAULT_WEEKLY_BUDGET,
     DOMAIN,
+    parse_presets,
 )
 
 
@@ -28,10 +31,15 @@ class TimekprSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial user step."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(
-                title=f"Timekpr {user_input.get(CONF_NODE_ID, DEFAULT_NODE_ID)}",
-                data=user_input,
-            )
+            try:
+                parse_presets(user_input.get(CONF_TV_PRESETS, DEFAULT_TV_PRESETS))
+            except ValueError:
+                errors[CONF_TV_PRESETS] = "invalid_presets"
+            else:
+                return self.async_create_entry(
+                    title=f"Timekpr {user_input.get(CONF_NODE_ID, DEFAULT_NODE_ID)}",
+                    data=user_input,
+                )
 
         return self.async_show_form(
             step_id="user",
@@ -47,6 +55,7 @@ class TimekprSyncConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Optional(
                         CONF_WEEKEND_CAP, default=DEFAULT_WEEKEND_CAP
                     ): vol.Coerce(int),
+                    vol.Optional(CONF_TV_PRESETS, default=DEFAULT_TV_PRESETS): str,
                 }
             ),
             errors=errors,
@@ -63,11 +72,18 @@ class TimekprSyncOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
+            errors: dict[str, str] = {}
             if user_input[CONF_WEEKLY_BUDGET] < 1:
+                errors[CONF_WEEKLY_BUDGET] = "invalid_budget"
+            try:
+                parse_presets(user_input.get(CONF_TV_PRESETS, DEFAULT_TV_PRESETS))
+            except ValueError:
+                errors[CONF_TV_PRESETS] = "invalid_presets"
+            if errors:
                 return self.async_show_form(
                     step_id="init",
                     data_schema=self._schema(user_input),
-                    errors={CONF_WEEKLY_BUDGET: "invalid_budget"},
+                    errors=errors,
                 )
             return self.async_create_entry(title="", data=user_input)
         return self.async_show_form(
@@ -90,6 +106,10 @@ class TimekprSyncOptionsFlow(config_entries.OptionsFlow):
                     CONF_WEEKEND_CAP,
                     default=int(cur.get(CONF_WEEKEND_CAP, DEFAULT_WEEKEND_CAP)),
                 ): vol.Coerce(int),
+                vol.Optional(
+                    CONF_TV_PRESETS,
+                    default=str(cur.get(CONF_TV_PRESETS, DEFAULT_TV_PRESETS)),
+                ): str,
             }
         )
 

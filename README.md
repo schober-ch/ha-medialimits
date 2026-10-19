@@ -97,7 +97,7 @@ Requires the MQTT integration to be set up and connected.
 **Manual:** copy `custom_components/timekpr_sync/` into `<config>/custom_components/`, restart, then add
 the integration as above.
 
-Weekly budget and caps can be changed later under the integration's **Configure** (options) menu.
+Weekly budget, caps and TV presets can be changed later under the integration's **Configure** (options) menu.
 
 ### Linux PC (client)
 
@@ -127,9 +127,15 @@ sudo timekpra --userinfort <child> | grep TIME_LEFT_DAY
 The agent runs as root, which `timekpra` requires. It handles SIGTERM, so the `offline` status is
 published on stop.
 
-## Dashboard buttons (TV time)
+## TV time buttons
 
-Add buttons or a script that call:
+The integration creates a deduct and a give-back button for every TV preset (default `15,30`), for
+example `button.tv_deduct_15_min_<node>` and `button.tv_add_15_min_<node>`. Pressing one subtracts from
+or adds to the weekly budget. Change the presets (comma-separated minutes) in the integration's
+**Configure** menu; the entry reloads and the buttons are recreated. Buttons for presets you remove show
+up as unavailable and can be deleted under **Settings → Entities**.
+
+For amounts that are not a preset, or for scripts and automations, call the services directly:
 
 ```yaml
 service: timekpr_sync.deduct_tv_minutes
